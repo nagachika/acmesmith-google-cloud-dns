@@ -2,6 +2,7 @@ require "acmesmith/challenge_responders/base"
 
 require "json"
 require "google/apis/dns_v1"
+require "resolv"
 
 module Acmesmith
   module ChallengeResponders
@@ -32,13 +33,46 @@ module Acmesmith
       end
 
       def respond(domain, challenge)
+        puts "=> Responding challenge dns-01 for #{domain} in #{self.class.name}"
+
         domain = canonicalize(domain)
         zone_name = find_managed_zone(domain).name
+
+        puts " * create_change: #{challenge.record_type} #{[challenge.record_name, domain].join('.').inspect}, #{challenge.record_content.inspect}"
         change = Google::Apis::DnsV1::Change.new
         change.additions = [
           resource_record_set(domain, challenge)
         ]
-        @api.create_change(@project_id, zone_name, change)
+        resp = @api.create_change(@project_id, zone_name, change)
+
+        change_id = resp.id
+        puts " * requested change: #{change_id}"
+
+        while resp.status != 'done'
+          puts " * change #{change_id.inspect} is still #{resp.status.inspect}"
+          sleep 5
+          resp = @api.get_change(@project_id, zone_name, change_id)
+        end
+
+        puts " * synced!"
+
+        puts "=> Checking DNS resource record"
+        nameservers =  @api.get_managed_zone(@project_id, zone_name).name_servers
+        puts " * nameservers: #{nameservers.inspect}"
+        nameservers.each do |ns|
+          Resolv::DNS.open(:nameserver => Resolv.getaddresses(ns)) do |dns|
+            dns.timeouts = 5
+            begin
+              ret = dns.getresource([challenge.record_name, domain].join('.'), Resolv::DNS::Resource::IN::TXT)
+            rescue Resolv::ResolvError => e
+              puts " * [#{ns}] failed: #{e.to_s}"
+              sleep 5
+              retry
+            end
+            puts " * [#{ns}] success: ttl=#{ret.ttl.inspect}, data=#{ret.data.inspect}"
+            sleep 1
+          end
+        end
       end
 
       def cleanup(domain, challenge)
