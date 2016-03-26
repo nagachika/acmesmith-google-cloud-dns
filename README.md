@@ -45,7 +45,7 @@ storage:
   path: /path/to/key/storage
 
 challenge_responders:
-  - google-cloud-dns:
+  - google_cloud_dns:
       project_id: my-project-id # GCP Project ID. Be careful it's different from Project Name.
       compute_engine_service_account: true # (pick-one): You can use GCE VM instance scope
       private_key_json_file: /path/to/credential.json # (pick-one) Only JSON key file is supported
