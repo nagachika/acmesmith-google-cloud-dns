@@ -2,6 +2,7 @@ require "acmesmith/challenge_responders/base"
 
 require "json"
 require "google/apis/dns_v1"
+require "resolv"
 
 module Acmesmith
   module ChallengeResponders
@@ -54,6 +55,24 @@ module Acmesmith
         end
 
         puts " * synced!"
+
+        puts "=> Checking DNS resource record"
+        nameservers =  @api.get_managed_zone(@project_id, zone_name).name_servers
+        puts " * nameservers: #{nameservers.inspect}"
+        nameservers.each do |ns|
+          Resolv::DNS.open(:nameserver => Resolv.getaddresses(ns)) do |dns|
+            dns.timeouts = 5
+            begin
+              ret = dns.getresource([challenge.record_name, domain].join('.'), Resolv::DNS::Resource::IN::TXT)
+            rescue Resolv::ResolvError => e
+              puts " * [#{ns}] failed: #{e.to_s}"
+              sleep 5
+              retry
+            end
+            puts " * [#{ns}] success: ttl=#{ret.ttl.inspect}, data=#{ret.data.inspect}"
+            sleep 1
+          end
+        end
       end
 
       def cleanup(domain, challenge)
