@@ -32,13 +32,28 @@ module Acmesmith
       end
 
       def respond(domain, challenge)
+        puts "=> Responding challenge dns-01 for #{domain} in #{self.class.name}"
+
         domain = canonicalize(domain)
         zone_name = find_managed_zone(domain).name
+
+        puts " * create_change: #{challenge.record_type} #{[challenge.record_name, domain].join('.').inspect}, #{challenge.record_content.inspect}"
         change = Google::Apis::DnsV1::Change.new
         change.additions = [
           resource_record_set(domain, challenge)
         ]
-        @api.create_change(@project_id, zone_name, change)
+        resp = @api.create_change(@project_id, zone_name, change)
+
+        change_id = resp.id
+        puts " * requested change: #{change_id}"
+
+        while resp.status != 'done'
+          puts " * change #{change_id.inspect} is still #{resp.status.inspect}"
+          sleep 5
+          resp = @api.get_change(@project_id, zone_name, change_id)
+        end
+
+        puts " * synced!"
       end
 
       def cleanup(domain, challenge)
