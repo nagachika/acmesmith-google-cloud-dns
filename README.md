@@ -1,19 +1,3 @@
-# *Caution: I cannot authorize by dns-01 challenge with Google Cloud DNS.*
-
-I receive the following error from \*.api.letsencrypt.org with acmesmith-google-cloud-dns.
-
-```
-(After add 'A' record for my domain with Google Cloud DNS, shown as 'EXAMPLE.COM' in here)
-$ bundle exec acmesmith authorize
-=> Requesting verification...
- * verify_status: invalid
- urn:acme:error:connection: DNS problem: NXDOMAIN looking up TXT for _acme-challenge.EXAMPLE.COM
-```
-
-I confirmed that `dig -t TXT _acme-challenge.EXAMPLE.COM` show expected token.
-I don't know the cause of the failure. Is it from the restriction of Google Cloud DNS or my poor operation?
-I publish this repository just as my memorandum and didn't push gem package to rubygems.org.
-
 # acmesmith-google-cloud-dns
 
 This gem is a plugin for [Acmesmith](https://github.com/sorah/acmesmith) and implements an automated `dns-01` challenge responder using Google Cloud DNS.
