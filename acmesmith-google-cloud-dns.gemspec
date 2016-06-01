@@ -11,7 +11,7 @@ Gem::Specification.new do |spec|
 
   spec.summary       = %q{acmesmith plugin implementing dns-01 using Google Cloud DNS}
   spec.description   = %q{This gem is a plugin for acmesmith and implements an automated dns-01 challenge responder using Google Cloud DNS}
-  spec.homepage      = "https://github.com/nagachika/acmetmith-google-cloud-dns"
+  spec.homepage      = "https://github.com/nagachika/acmesmith-google-cloud-dns"
   spec.license       = "MIT"
 
   spec.files         = `git ls-files -z`.split("\x0").reject { |f| f.match(%r{^(test|spec|features)/}) }
