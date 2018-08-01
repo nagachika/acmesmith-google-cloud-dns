@@ -78,15 +78,17 @@ module Acmesmith
         nameservers.each do |ns|
           Resolv::DNS.open(:nameserver => Resolv.getaddresses(ns)) do |dns|
             dns.timeouts = 5
-            begin
-              ret = dns.getresource([challenge.record_name, domain].join('.'), Resolv::DNS::Resource::IN::TXT)
-            rescue Resolv::ResolvError => e
-              puts " * [#{ns}] failed: #{e.to_s}"
-              sleep 5
-              retry
+            loop do
+              resources = dns.getresources([challenge.record_name, domain].join('.'), Resolv::DNS::Resource::IN::TXT)
+              if resources.any?{|resource| resource.data == challenge.record_content }
+                puts " * [#{ns}] success: #{resources.map{|r| {ttl: r.ttl, data: r.data} }.inspect}"
+                sleep 1
+                break
+              else
+                puts " * [#{ns}] failed: #{resources.map{|r| {ttl: r.ttl, data: r.data} }.inspect}"
+                sleep 5
+              end
             end
-            puts " * [#{ns}] success: ttl=#{ret.ttl.inspect}, data=#{ret.data.inspect}"
-            sleep 1
           end
         end
       end
