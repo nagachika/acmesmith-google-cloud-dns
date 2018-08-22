@@ -40,25 +40,7 @@ module Acmesmith
 
         puts " * create_change: #{challenge.record_type} #{[challenge.record_name, domain].join('.').inspect}, #{challenge.record_content.inspect}"
 
-        change = Google::Apis::DnsV1::Change.new
-
-        rrsets = @api.fetch_all(items: :rrsets) do |token|
-          @api.list_resource_record_sets(@project_id, zone_name, page_token: token)
-        end
-        old_rrset = rrsets.find{ |rrset|
-          rrset.name == resource_record_set(domain, challenge).name &&
-          rrset.type == resource_record_set(domain, challenge).type
-        }
-        if old_rrset
-          change.deletions = [
-            old_rrset
-          ]
-        end
-
-        change.additions = [
-          resource_record_set(domain, challenge, old_rrset)
-        ]
-
+        change = change_for_challenge(zone_name, domain, challenge)
         resp = @api.create_change(@project_id, zone_name, change)
 
         change_id = resp.id
@@ -96,30 +78,8 @@ module Acmesmith
       def cleanup(domain, challenge)
         domain = canonicalize(domain)
         zone_name = find_managed_zone(domain).name
-        change = Google::Apis::DnsV1::Change.new
-        rrsets = @api.fetch_all(items: :rrsets) do |token|
-          @api.list_resource_record_sets(@project_id, zone_name, page_token: token)
-        end
-        old_rrset = rrsets.find{ |rrset|
-          rrset.name == resource_record_set(domain, challenge).name &&
-          rrset.type == resource_record_set(domain, challenge).type
-        }
-        if old_rrset
-          change.deletions = [
-            old_rrset
-          ]
-          if old_rrset.rrdatas != [challenge.record_content]
-            change.additions = [
-              Google::Apis::DnsV1::ResourceRecordSet.new(
-                name: [challenge.record_name, domain].join("."),
-                type: challenge.record_type,
-                rrdatas: old_rrset.rrdatas - [challenge.record_content],
-                ttl: @config[:ttl] || 5
-              )
-            ]
-          end
-          @api.create_change(@project_id, zone_name, change)
-        end
+        change = change_for_challenge(zone_name, domain, challenge, for_cleanup: true)
+        @api.create_change(@project_id, zone_name, change)
       end
 
       private
@@ -146,18 +106,36 @@ module Acmesmith
         managed_zone
       end
 
-      def resource_record_set(domain, challenge, old_rrset=nil)
-        if old_rrset
-          rrdatas = [ *old_rrset.rrdatas, challenge.record_content ]
-        else
-          rrdatas = [ challenge.record_content ]
+      def change_for_challenge(zone_name, domain, challenge, for_cleanup: false)
+        name = [challenge.record_name, domain].join('.')
+        type = challenge.record_type
+        data = "\"#{challenge.record_content}\""
+
+        rrsets = @api.fetch_all(items: :rrsets) do |token|
+          @api.list_resource_record_sets(@project_id, zone_name, page_token: token)
         end
-        Google::Apis::DnsV1::ResourceRecordSet.new(
-          name: [challenge.record_name, domain].join("."),
-          type: challenge.record_type,
-          rrdatas: rrdatas,
+
+        current_rrset = rrsets.find{ |rrset| rrset.type == type && rrset.name == name }
+
+        change = Google::Apis::DnsV1::Change.new
+        change.deletions = [ current_rrset ] if current_rrset
+
+        new_rrset = Google::Apis::DnsV1::ResourceRecordSet.new(
+          name: name,
+          type: type,
+          rrdatas: current_rrset ? current_rrset.rrdatas.dup : [],
           ttl: @config[:ttl] || 5
         )
+
+        if for_cleanup
+          new_rrset.rrdatas.delete(data)
+          change.additions = [ new_rrset ] if !new_rrset.rrdatas.empty?
+        else
+          new_rrset.rrdatas.push(data) if !new_rrset.rrdatas.include?(data)
+          change.additions = [ new_rrset ]
+        end
+
+        change
       end
     end
   end
