@@ -39,10 +39,8 @@ module Acmesmith
         zone_name = find_managed_zone(domain).name
 
         puts " * create_change: #{challenge.record_type} #{[challenge.record_name, domain].join('.').inspect}, #{challenge.record_content.inspect}"
-        change = Google::Apis::DnsV1::Change.new
-        change.additions = [
-          resource_record_set(domain, challenge)
-        ]
+
+        change = change_for_challenge(zone_name, domain, challenge)
         resp = @api.create_change(@project_id, zone_name, change)
 
         change_id = resp.id
@@ -62,15 +60,17 @@ module Acmesmith
         nameservers.each do |ns|
           Resolv::DNS.open(:nameserver => Resolv.getaddresses(ns)) do |dns|
             dns.timeouts = 5
-            begin
-              ret = dns.getresource([challenge.record_name, domain].join('.'), Resolv::DNS::Resource::IN::TXT)
-            rescue Resolv::ResolvError => e
-              puts " * [#{ns}] failed: #{e.to_s}"
-              sleep 5
-              retry
+            loop do
+              resources = dns.getresources([challenge.record_name, domain].join('.'), Resolv::DNS::Resource::IN::TXT)
+              if resources.any?{|resource| resource.data == challenge.record_content }
+                puts " * [#{ns}] success: #{resources.map{|r| {ttl: r.ttl, data: r.data} }.inspect}"
+                sleep 1
+                break
+              else
+                puts " * [#{ns}] failed: #{resources.map{|r| {ttl: r.ttl, data: r.data} }.inspect}"
+                sleep 5
+              end
             end
-            puts " * [#{ns}] success: ttl=#{ret.ttl.inspect}, data=#{ret.data.inspect}"
-            sleep 1
           end
         end
       end
@@ -78,10 +78,7 @@ module Acmesmith
       def cleanup(domain, challenge)
         domain = canonicalize(domain)
         zone_name = find_managed_zone(domain).name
-        change = Google::Apis::DnsV1::Change.new
-        change.deletions = [
-          resource_record_set(domain, challenge)
-        ]
+        change = change_for_challenge(zone_name, domain, challenge, for_cleanup: true)
         @api.create_change(@project_id, zone_name, change)
       end
 
@@ -109,13 +106,36 @@ module Acmesmith
         managed_zone
       end
 
-      def resource_record_set(domain, challenge)
-        Google::Apis::DnsV1::ResourceRecordSet.new(
-          name: [challenge.record_name, domain].join("."),
-          type: challenge.record_type,
-          rrdatas: [challenge.record_content],
+      def change_for_challenge(zone_name, domain, challenge, for_cleanup: false)
+        name = [challenge.record_name, domain].join('.')
+        type = challenge.record_type
+        data = "\"#{challenge.record_content}\""
+
+        rrsets = @api.fetch_all(items: :rrsets) do |token|
+          @api.list_resource_record_sets(@project_id, zone_name, page_token: token)
+        end
+
+        current_rrset = rrsets.find{ |rrset| rrset.type == type && rrset.name == name }
+
+        change = Google::Apis::DnsV1::Change.new
+        change.deletions = [ current_rrset ] if current_rrset
+
+        new_rrset = Google::Apis::DnsV1::ResourceRecordSet.new(
+          name: name,
+          type: type,
+          rrdatas: current_rrset ? current_rrset.rrdatas.dup : [],
           ttl: @config[:ttl] || 5
         )
+
+        if for_cleanup
+          new_rrset.rrdatas.delete(data)
+          change.additions = [ new_rrset ] if !new_rrset.rrdatas.empty?
+        else
+          new_rrset.rrdatas.push(data) if !new_rrset.rrdatas.include?(data)
+          change.additions = [ new_rrset ]
+        end
+
+        change
       end
     end
   end
