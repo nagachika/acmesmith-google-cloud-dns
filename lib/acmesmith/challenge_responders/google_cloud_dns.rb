@@ -44,7 +44,27 @@ module Acmesmith
         resp = @api.create_change(@project_id, zone_name, change)
 
         change_id = resp.id
+
+        wait_for_sync(zone_name, domain, challenge, change_id)
+      end
+
+      def cleanup(domain, challenge)
+        domain = canonicalize(domain)
+        zone_name = find_managed_zone(domain).name
+        change = change_for_challenge(zone_name, domain, challenge, for_cleanup: true)
+        @api.create_change(@project_id, zone_name, change)
+      end
+
+      private
+
+      def wait_for_sync(zone_name, domain, challenge, change_id)
+        wait_for_sync_by_api(zone_name, change_id)
+        wait_for_sync_by_dns(zone_name, domain, challenge)
+      end
+
+      def wait_for_sync_by_api(zone_name, change_id)
         puts " * requested change: #{change_id}"
+        resp = @api.get_change(@project_id, zone_name, change_id)
 
         while resp.status != 'done'
           puts " * change #{change_id.inspect} is still #{resp.status.inspect}"
@@ -53,7 +73,9 @@ module Acmesmith
         end
 
         puts " * synced!"
+      end
 
+      def wait_for_sync_by_dns(zone_name, domain, challenge)
         puts "=> Checking DNS resource record"
         nameservers =  @api.get_managed_zone(@project_id, zone_name).name_servers
         puts " * nameservers: #{nameservers.inspect}"
@@ -74,15 +96,6 @@ module Acmesmith
           end
         end
       end
-
-      def cleanup(domain, challenge)
-        domain = canonicalize(domain)
-        zone_name = find_managed_zone(domain).name
-        change = change_for_challenge(zone_name, domain, challenge, for_cleanup: true)
-        @api.create_change(@project_id, zone_name, change)
-      end
-
-      private
 
       def load_json_key(filepath)
         obj = JSON.parse(File.read(filepath))
