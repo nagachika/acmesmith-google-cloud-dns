@@ -11,6 +11,10 @@ module Acmesmith
         type == 'dns-01'
       end
 
+      def cap_respond_all?
+        true
+      end
+
       def initialize(config)
         @config = config
         @scope = "https://www.googleapis.com/auth/ndev.clouddns.readwrite"
@@ -32,6 +36,29 @@ module Acmesmith
         @project_id = @config[:project_id]
       end
 
+      def respond_all(*domain_and_challenges)
+        challenges_by_zone_names = domain_and_challenges.group_by{ |domain, challenge|
+          domain = canonicalize(domain)
+          find_managed_zone(domain).name
+        }
+
+        challenges_by_zone_names.each do |zone_name, dcs|
+          changes =  ## TODO: not implemented yet
+          # dcs.each do |domain, challenge|
+          #   p [zone_name, domain, challenge.record_type, challenge.record_content]
+          # end
+        end
+      end
+
+      def cleanup_all(*domain_and_challenges)
+        challenges_by_zone_names = domain_and_challenges.group_by{ |domain, challenge|
+          domain = canonicalize(domain)
+          find_managed_zone(domain).name
+        }
+        ## TODO: not implemented yet
+      end
+
+      ## TODO: remove this method
       def respond(domain, challenge)
         puts "=> Responding challenge dns-01 for #{domain} in #{self.class.name}"
 
@@ -48,6 +75,7 @@ module Acmesmith
         wait_for_sync(zone_name, domain, challenge, change_id)
       end
 
+      ## TODO: remove this method
       def cleanup(domain, challenge)
         domain = canonicalize(domain)
         zone_name = find_managed_zone(domain).name
