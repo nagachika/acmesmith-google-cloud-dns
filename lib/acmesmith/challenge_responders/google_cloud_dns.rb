@@ -45,9 +45,6 @@ module Acmesmith
         challenges_by_zone_names.each do |zone_name, dcs|
           change = change_for_challenges(zone_name, dcs)
 
-          require 'pry'
-          binding.pry
-
           resp = @api.create_change(@project_id, zone_name, change)
           change_id = resp.id
 
@@ -66,9 +63,6 @@ module Acmesmith
 
         challenges_by_zone_names.each do |zone_name, dcs|
           change = change_for_challenges(zone_name, dcs, for_cleanup: true)
-
-          require 'pry'
-          binding.pry
 
           resp = @api.create_change(@project_id, zone_name, change)
           change_id = resp.id
@@ -183,24 +177,6 @@ module Acmesmith
         }.select{ |rrset|
           rrset.rrdatas != []
         }
-
-        change.deletions.each.with_index do |deletion, idx|
-          puts "change.deletions[#{idx}].name = #{deletion.name.inspect}"
-          puts "change.deletions[#{idx}].type = #{deletion.type.inspect}"
-          puts "change.deletions[#{idx}].ttl = #{deletion.ttl.inspect}"
-          deletion.rrdatas.each.with_index do |rrdata, idx2|
-            puts "change.deletions[#{idx}].rrdatas[#{idx2}] = #{rrdata.inspect}"
-          end
-        end
-
-        change.additions.each.with_index do |addition, idx|
-          puts "change.additions[#{idx}].name = #{addition.name.inspect}"
-          puts "change.additions[#{idx}].type = #{addition.type.inspect}"
-          puts "change.additions[#{idx}].ttl = #{addition.ttl.inspect}"
-          addition.rrdatas.each.with_index do |rrdata, idx2|
-            puts "change.additions[#{idx}].rrdatas[#{idx2}] = #{rrdata.inspect}"
-          end
-        end
 
         change
       end
