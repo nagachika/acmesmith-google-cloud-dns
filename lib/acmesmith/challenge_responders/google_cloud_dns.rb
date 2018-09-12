@@ -77,37 +77,7 @@ module Acmesmith
         end
       end
 
-      ## TODO: remove this method
-      def respond(domain, challenge)
-        puts "=> Responding challenge dns-01 for #{domain} in #{self.class.name}"
-
-        domain = canonicalize(domain)
-        zone_name = find_managed_zone(domain).name
-
-        puts " * create_change: #{challenge.record_type} #{[challenge.record_name, domain].join('.').inspect}, #{challenge.record_content.inspect}"
-
-        change = change_for_challenge(zone_name, domain, challenge)
-        resp = @api.create_change(@project_id, zone_name, change)
-
-        change_id = resp.id
-
-        wait_for_sync(zone_name, domain, challenge, change_id)
-      end
-
-      ## TODO: remove this method
-      def cleanup(domain, challenge)
-        domain = canonicalize(domain)
-        zone_name = find_managed_zone(domain).name
-        change = change_for_challenge(zone_name, domain, challenge, for_cleanup: true)
-        @api.create_change(@project_id, zone_name, change)
-      end
-
       private
-
-      def wait_for_sync(zone_name, domain, challenge, change_id)
-        wait_for_sync_by_api(zone_name, change_id)
-        wait_for_sync_by_dns(zone_name, domain, challenge)
-      end
 
       def wait_for_sync_by_api(zone_name, change_id)
         puts " * requested change: #{change_id}"
@@ -164,39 +134,6 @@ module Acmesmith
           raise "Domain #{domain} is not managed in Google Cloud DNS [project_id=#{@project_id}]"
         end
         managed_zone
-      end
-
-      ## TODO: remove this method
-      def change_for_challenge(zone_name, domain, challenge, for_cleanup: false)
-        name = [challenge.record_name, domain].join('.')
-        type = challenge.record_type
-        data = "\"#{challenge.record_content}\""
-
-        rrsets = @api.fetch_all(items: :rrsets) do |token|
-          @api.list_resource_record_sets(@project_id, zone_name, page_token: token)
-        end
-
-        current_rrset = rrsets.find{ |rrset| rrset.type == type && rrset.name == name }
-
-        change = Google::Apis::DnsV1::Change.new
-        change.deletions = [ current_rrset ] if current_rrset
-
-        new_rrset = Google::Apis::DnsV1::ResourceRecordSet.new(
-          name: name,
-          type: type,
-          rrdatas: current_rrset ? current_rrset.rrdatas.dup : [],
-          ttl: @config[:ttl] || 5
-        )
-
-        if for_cleanup
-          new_rrset.rrdatas.delete(data)
-          change.additions = [ new_rrset ] if !new_rrset.rrdatas.empty?
-        else
-          new_rrset.rrdatas.push(data) if !new_rrset.rrdatas.include?(data)
-          change.additions = [ new_rrset ]
-        end
-
-        change
       end
 
       def change_for_challenges(zone_name, domain_and_challenges, for_cleanup: false)
