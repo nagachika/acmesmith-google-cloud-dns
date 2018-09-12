@@ -43,63 +43,7 @@ module Acmesmith
         }
 
         challenges_by_zone_names.each do |zone_name, dcs|
-          current_rrsets = @api.fetch_all(items: :rrsets) do |token|
-            @api.list_resource_record_sets(@project_id, zone_name, page_token: token)
-          end
-
-          change = Google::Apis::DnsV1::Change.new
-
-          change.deletions = dcs.map{ |domain, challenge|
-            domain = canonicalize(domain)
-            name = [challenge.record_name, domain].join('.')
-            type = challenge.record_type
-
-            current_rrsets.find{ |rrset| rrset.type == type && rrset.name == name }
-          }.uniq.compact
-
-          change.additions = dcs.map{ |domain, challenge|
-            domain = canonicalize(domain)
-            name = [challenge.record_name, domain].join('.')
-            type = challenge.record_type
-            data = "\"#{challenge.record_content}\""
-
-            {
-              name: name,
-              type: type,
-              rrdatas: [data],
-            }
-          }.group_by{ |rrset_param|
-            [ rrset_param[:name], rrset_param[:type] ]
-          }.map{ |(name, type), rrset_params|
-            current_rrset = current_rrsets.find{ |rrset| rrset.type == type && rrset.name == name }
-
-            new_rrset = Google::Apis::DnsV1::ResourceRecordSet.new(
-              name: name,
-              type: type,
-              rrdatas: current_rrset ? current_rrset.rrdatas : [],
-              ttl: @config[:ttl] || 5,
-            )
-
-            new_rrset.rrdatas += rrset_params.map{|rrset| rrset[:rrdatas] }.flatten
-            new_rrset
-          }
-
-          change.deletions.each.with_index do |deletion, idx|
-            puts "change.deletions[#{idx}].name = #{deletion.name.inspect}"
-            puts "change.deletions[#{idx}].type = #{deletion.type.inspect}"
-            puts "change.deletions[#{idx}].ttl = #{deletion.ttl.inspect}"
-            deletion.rrdatas.each.with_index do |rrdata, idx2|
-              puts "change.deletions[#{idx}].rrdatas[#{idx2}] = #{rrdata.inspect}"
-            end
-          end
-          change.additions.each.with_index do |addition, idx|
-            puts "change.additions[#{idx}].name = #{addition.name.inspect}"
-            puts "change.additions[#{idx}].type = #{addition.type.inspect}"
-            puts "change.additions[#{idx}].ttl = #{addition.ttl.inspect}"
-            addition.rrdatas.each.with_index do |rrdata, idx2|
-              puts "change.additions[#{idx}].rrdatas[#{idx2}] = #{rrdata.inspect}"
-            end
-          end
+          change = change_for_challenges(zone_name, dcs)
 
           require 'pry'
           binding.pry
@@ -211,6 +155,7 @@ module Acmesmith
         managed_zone
       end
 
+      ## TODO: remove this method
       def change_for_challenge(zone_name, domain, challenge, for_cleanup: false)
         name = [challenge.record_name, domain].join('.')
         type = challenge.record_type
@@ -238,6 +183,69 @@ module Acmesmith
         else
           new_rrset.rrdatas.push(data) if !new_rrset.rrdatas.include?(data)
           change.additions = [ new_rrset ]
+        end
+
+        change
+      end
+
+      def change_for_challenges(zone_name, domain_and_challenges)
+        current_rrsets = @api.fetch_all(items: :rrsets) do |token|
+          @api.list_resource_record_sets(@project_id, zone_name, page_token: token)
+        end
+
+        change = Google::Apis::DnsV1::Change.new
+
+        change.deletions = domain_and_challenges.map{ |domain, challenge|
+          domain = canonicalize(domain)
+          name = [challenge.record_name, domain].join('.')
+          type = challenge.record_type
+
+          current_rrsets.find{ |rrset| rrset.type == type && rrset.name == name }
+        }.uniq.compact
+
+        change.additions = domain_and_challenges.map{ |domain, challenge|
+          domain = canonicalize(domain)
+          name = [challenge.record_name, domain].join('.')
+          type = challenge.record_type
+          data = "\"#{challenge.record_content}\""
+
+          {
+            name: name,
+            type: type,
+            rrdatas: [data],
+          }
+        }.group_by{ |rrset_param|
+          [ rrset_param[:name], rrset_param[:type] ]
+        }.map{ |(name, type), rrset_params|
+          current_rrset = current_rrsets.find{ |rrset| rrset.type == type && rrset.name == name }
+
+          new_rrset = Google::Apis::DnsV1::ResourceRecordSet.new(
+            name: name,
+            type: type,
+            rrdatas: current_rrset ? current_rrset.rrdatas : [],
+            ttl: @config[:ttl] || 5,
+          )
+
+          new_rrset.rrdatas += rrset_params.map{|rrset| rrset[:rrdatas] }.flatten
+          new_rrset
+        }
+
+        change.deletions.each.with_index do |deletion, idx|
+          puts "change.deletions[#{idx}].name = #{deletion.name.inspect}"
+          puts "change.deletions[#{idx}].type = #{deletion.type.inspect}"
+          puts "change.deletions[#{idx}].ttl = #{deletion.ttl.inspect}"
+          deletion.rrdatas.each.with_index do |rrdata, idx2|
+            puts "change.deletions[#{idx}].rrdatas[#{idx2}] = #{rrdata.inspect}"
+          end
+        end
+
+        change.additions.each.with_index do |addition, idx|
+          puts "change.additions[#{idx}].name = #{addition.name.inspect}"
+          puts "change.additions[#{idx}].type = #{addition.type.inspect}"
+          puts "change.additions[#{idx}].ttl = #{addition.ttl.inspect}"
+          addition.rrdatas.each.with_index do |rrdata, idx2|
+            puts "change.additions[#{idx}].rrdatas[#{idx2}] = #{rrdata.inspect}"
+          end
         end
 
         change
