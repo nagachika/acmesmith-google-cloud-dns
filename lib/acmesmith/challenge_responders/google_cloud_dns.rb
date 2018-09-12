@@ -63,7 +63,18 @@ module Acmesmith
           domain = canonicalize(domain)
           find_managed_zone(domain).name
         }
-        ## TODO: not implemented yet
+
+        challenges_by_zone_names.each do |zone_name, dcs|
+          change = change_for_challenges(zone_name, dcs, for_cleanup: true)
+
+          require 'pry'
+          binding.pry
+
+          resp = @api.create_change(@project_id, zone_name, change)
+          change_id = resp.id
+
+          wait_for_sync_by_api(zone_name, change_id)
+        end
       end
 
       ## TODO: remove this method
@@ -188,7 +199,7 @@ module Acmesmith
         change
       end
 
-      def change_for_challenges(zone_name, domain_and_challenges)
+      def change_for_challenges(zone_name, domain_and_challenges, for_cleanup: false)
         current_rrsets = @api.fetch_all(items: :rrsets) do |token|
           @api.list_resource_record_sets(@project_id, zone_name, page_token: token)
         end
@@ -226,8 +237,14 @@ module Acmesmith
             ttl: @config[:ttl] || 5,
           )
 
-          new_rrset.rrdatas += rrset_params.map{|rrset| rrset[:rrdatas] }.flatten
+          if for_cleanup
+            new_rrset.rrdatas -= rrset_params.map{|rrset| rrset[:rrdatas] }.flatten
+          else
+            new_rrset.rrdatas += rrset_params.map{|rrset| rrset[:rrdatas] }.flatten
+          end
           new_rrset
+        }.select{ |rrset|
+          rrset.rrdatas != []
         }
 
         change.deletions.each.with_index do |deletion, idx|
