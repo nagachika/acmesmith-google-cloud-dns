@@ -3,6 +3,7 @@ require "acmesmith/challenge_responders/base"
 require "json"
 require "google/apis/dns_v1"
 require "resolv"
+require "set"
 
 module Acmesmith
   module ChallengeResponders
@@ -49,9 +50,7 @@ module Acmesmith
           change_id = resp.id
 
           wait_for_sync_by_api(zone_name, change_id)
-          dcs.each do |domain, challenge|
-            wait_for_sync_by_dns(zone_name, domain, challenge)
-          end
+          wait_for_sync_by_dns(zone_name, change)
         end
       end
 
@@ -86,22 +85,26 @@ module Acmesmith
         puts " * synced!"
       end
 
-      def wait_for_sync_by_dns(zone_name, domain, challenge)
+      def wait_for_sync_by_dns(zone_name, change)
         puts "=> Checking DNS resource record"
         nameservers =  @api.get_managed_zone(@project_id, zone_name).name_servers
         puts " * nameservers: #{nameservers.inspect}"
         nameservers.each do |ns|
           Resolv::DNS.open(:nameserver => Resolv.getaddresses(ns)) do |dns|
             dns.timeouts = 5
-            loop do
-              resources = dns.getresources([challenge.record_name, domain].join('.'), Resolv::DNS::Resource::IN::TXT)
-              if resources.any?{|resource| resource.data == challenge.record_content }
-                puts " * [#{ns}] success: #{resources.map{|r| {ttl: r.ttl, data: r.data} }.inspect}"
-                sleep 1
-                break
-              else
-                puts " * [#{ns}] failed: #{resources.map{|r| {ttl: r.ttl, data: r.data} }.inspect}"
-                sleep 5
+            change.additions.each do |rrset|
+              required_rrdatas = Set.new(rrset.rrdatas.map{|rrdata| rrdata.gsub(/(\A"|"\z)/, '') })
+              loop do
+                resources = dns.getresources(rrset.name, Resolv::DNS::Resource::IN::TXT)
+                actual_rrdatas = resources.map(&:data)
+                if required_rrdatas == Set.new(actual_rrdatas)
+                  puts " * [#{ns} -> #{rrset.name}] success. (acctual=#{actual_rrdatas.inspect})"
+                  sleep 1
+                  break
+                else
+                  puts " * [#{ns} -> #{rrset.name}] failed. (required=#{required_rrdatas.to_a.inspect}, but acctual=#{actual_rrdatas.inspect})"
+                  sleep 5
+                end
               end
             end
           end
