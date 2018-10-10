@@ -94,10 +94,16 @@ module Acmesmith
             dns.timeouts = 5
             change.additions.each do |rrset|
               required_rrdatas = Set.new(rrset.rrdatas)
+
+              deletion = change.deletions.find{|_deletion| _deletion.name == rrset.name && _deletion.type == rrset.type }
+              if deletion
+                required_rrdatas -= Set.new(deletion.rrdatas)
+              end
+
               loop do
                 resources = dns.getresources(rrset.name, Resolv::DNS::Resource::IN::TXT)
                 actual_rrdatas = resources.map(&:data)
-                if required_rrdatas == Set.new(actual_rrdatas)
+                if required_rrdatas.subset?(Set.new(actual_rrdatas))
                   puts " * [#{ns} -> #{rrset.name}] success. (acctual=#{actual_rrdatas.inspect})"
                   sleep 1
                   break
