@@ -22,7 +22,7 @@ Use `google-cloud-dns` challenge responder in your `acmesmith.yml`. General inst
 Write your `tenant_name`, `username`, `password` and `auth_url` in `acmesmith.yml`, or if you don't want to write them down into the file, export these values as the corresponding environment variables `OS_TENANT_NAME`, `OS_USERNAME`, `OS_PASSWORD` and `OS_AUTH_URL`.
 
 ```yaml
-endpoint: https://acme-v01.api.letsencrypt.org/
+directory: https://acme-v02.api.letsencrypt.org/directory
 
 storage:
   type: filesystem
