@@ -93,7 +93,7 @@ module Acmesmith
           Resolv::DNS.open(:nameserver => Resolv.getaddresses(ns)) do |dns|
             dns.timeouts = 5
             change.additions.each do |rrset|
-              required_rrdatas = Set.new(rrset.rrdatas)
+              required_rrdatas = Set.new(rrset.rrdatas.map{|rrdata| rrdata.gsub(/(\A"|"\z)/, '') })
 
               deletion = change.deletions.find{|_deletion| _deletion.name == rrset.name && _deletion.type == rrset.type }
               if deletion
@@ -158,7 +158,7 @@ module Acmesmith
           domain = canonicalize(domain)
           name = [challenge.record_name, domain].join('.')
           type = challenge.record_type
-          data = challenge.record_content
+          data = "\"#{challenge.record_content}\""
 
           {
             name: name,
