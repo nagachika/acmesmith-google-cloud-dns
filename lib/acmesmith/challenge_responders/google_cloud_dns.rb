@@ -104,11 +104,11 @@ module Acmesmith
                 resources = dns.getresources(rrset.name, Resolv::DNS::Resource::IN::TXT)
                 actual_rrdatas = resources.map(&:data)
                 if required_rrdatas.subset?(Set.new(actual_rrdatas))
-                  puts " * [#{ns} -> #{rrset.name}] success. (acctual=#{actual_rrdatas.inspect})"
+                  puts " * [#{ns} -> #{rrset.name}] success. (actual=#{actual_rrdatas.inspect})"
                   sleep 1
                   break
                 else
-                  puts " * [#{ns} -> #{rrset.name}] failed. (required=#{required_rrdatas.to_a.inspect}, but acctual=#{actual_rrdatas.inspect})"
+                  puts " * [#{ns} -> #{rrset.name}] failed. (required=#{required_rrdatas.to_a.inspect}, but actual=#{actual_rrdatas.inspect})"
                   sleep 5
                 end
               end
