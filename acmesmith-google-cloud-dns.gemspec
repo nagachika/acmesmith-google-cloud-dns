@@ -21,8 +21,4 @@ Gem::Specification.new do |spec|
 
   spec.add_dependency "acmesmith", "~> 2.0"
   spec.add_dependency "google-api-client"
-
-  spec.add_development_dependency "bundler", "~> 1.10"
-  spec.add_development_dependency "rake", "~> 10.0"
-  spec.add_development_dependency 'rspec', '~> 3.0'
 end
